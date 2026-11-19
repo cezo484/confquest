@@ -26,7 +26,7 @@ The server (`serve.js`) is a small static file server on the Node.js standard li
 
 ## Testing
 
-`npm test` runs 21 tests with the built-in `node:test` runner. The tests cover movement clamping on all four edges, room detection, opening a question only inside an uncollected room, right and wrong answers, out-of-range answers, answering with no open question, the win condition after six badges, the timer counting down and ending the game at zero, the timer doing nothing after the game ends, scoring with and without the time bonus, and the shape of every room definition. Every test runs offline and finishes in well under a second.
+`npm test` runs 21 tests with the built-in `node:test` runner. The tests cover movement clamping on all four edges, room detection, opening a question only inside an uncollected room, right and wrong answers, out-of-range answers, and answering with no open question. They also cover the win condition after six badges, the timer counting down and ending the game at zero, and the timer doing nothing after the game ends. They cover scoring with and without the time bonus, and the shape of every room definition. Every test runs offline and finishes in well under a second.
 
 The browser page was checked by serving it locally and opening it at http://localhost:8080. Keyboard movement, the Enter Room button, the question panel, the timer, and the end screen were all exercised by hand in a round.
 
@@ -39,7 +39,7 @@ The hackathon requires at least one JetBrains tool, so the builder does a final 
 Exact steps:
 
 1. Redeem the 2-month All Products Pack code on the JetBrains site and sign in with the JetBrains account.
-2. Install WebStorm from the JetBrains site or through the JetBrains Toolbox app. IntelliJ IDEA Ultimate also works.
+2. Install WebStorm from the JetBrains site or through the JetBrains Toolbox App. IntelliJ IDEA Ultimate also works.
 3. Open this project folder in the IDE. Let the IDE index the project.
 4. Run the IDE code inspection on the whole project (Code, Inspect Code). Read each finding and fix the real ones. The likely findings are minor style and naming notes.
 5. Do a short refactor pass by hand: check the function names in `src/game.js`, remove any dead code, and confirm the comments still match the code. Use the IDE rename and extract method actions for any change that touches more than one place.
@@ -48,6 +48,18 @@ Exact steps:
 8. Run the demo from the IDE terminal: `node serve.js`. Open http://localhost:8080 and play one full round.
 9. Commit the result with a message that names the pass, for example "Review pass in WebStorm: inspection fixes and cleanup". Push to the public repo.
 10. Record the demo video after this pass, so the video shows the submitted code.
+
+### Review pass record (19 November 2026)
+
+The pass ran with WebStorm 2026.3, headless, using the IDE Inspect Code
+command. It found three small real issues (two in this file, one type nit
+in the page) and all three were fixed; a full browser round found one more
+cosmetic issue (the last room label) and that was fixed too. Two weak
+warnings remain and are documented false positives. Full notes:
+docs/JETBRAINS-REVIEW.md. The IDE was not activated during this pass: the
+All Products Pack code needs a JetBrains account sign-in in a browser, so
+activation and the optional Junie step are still open for the author to do
+on their own machine.
 
 ## Limits and next steps
 
