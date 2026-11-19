@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ConfQuest: collect the talk badges</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #1c2333;
+    color: #f2f2f2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  h1 { margin: 4px 0 2px; font-size: 28px; }
+  .tagline { margin: 0 0 12px; color: #b9c2d4; }
+  #hud {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 10px;
+    font-size: 18px;
+  }
+  #hud b { color: #ffd166; }
+  #wrap { position: relative; max-width: 100%; }
+  canvas {
+    display: block;
+    width: 800px;
+    max-width: 100%;
+    height: auto;
+    background: #f6f1e7;
+    border-radius: 10px;
+    border: 3px solid #0e1420;
+  }
+  #hint { margin: 10px 0 0; min-height: 24px; color: #ffd166; font-size: 16px; }
+  #controls { margin-top: 12px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .pad { display: grid; grid-template-columns: repeat(3, 52px); gap: 4px; }
+  .pad button, #enterBtn, .panel button {
+    font-size: 18px;
+    padding: 10px 0;
+    border-radius: 8px;
+    border: 1px solid #39415a;
+    background: #2b3550;
+    color: #fff;
+    cursor: pointer;
+  }
+  .pad button:active, #enterBtn:active, .panel button:active { background: #42507a; }
+  #enterBtn { padding: 12px 22px; background: #2e7d5b; border-color: #2e7d5b; }
+  .keys { color: #b9c2d4; font-size: 14px; }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(14, 20, 32, 0.82);
+    border-radius: 10px;
+  }
+  .panel {
+    background: #fff;
+    color: #1c2333;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 520px;
+    width: calc(100% - 48px);
+    text-align: center;
+  }
+  .panel h2 { margin-top: 0; }
+  .panel p { line-height: 1.5; }
+  .panel button { background: #2e7d5b; border-color: #2e7d5b; padding: 12px 24px; margin-top: 8px; }
+  .options { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .options button { background: #eef1f7; color: #1c2333; border-color: #c9d1e0; padding: 10px 14px; text-align: left; font-size: 16px; }
+  .options button:hover { background: #dde5f2; }
+  #feedback { min-height: 22px; margin-top: 10px; font-weight: 600; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<h1>ConfQuest</h1>
+<p class="tagline">Walk the conference floor. Answer one question per room. Collect all six badges before the day ends.</p>
+
+<div id="hud">
+  <span>Time: <b id="time">3:00</b></span>
+  <span>Badges: <b id="badges">0 / 6</b></span>
+  <span>Score: <b id="score">0</b></span>
+</div>
+
+<div id="wrap">
+  <canvas id="game" width="800" height="500"></canvas>
+
+  <div id="startScreen" class="overlay">
+    <div class="panel">
+      <h2>Welcome to ConfQuest</h2>
+      <p>You have 3 minutes on the conference floor. Walk into a room and press E (or tap Enter Room) to answer its trivia question. A right answer earns that room badge.</p>
+      <p>Move with the arrow keys or WASD. On a touch screen, use the buttons under the floor map.</p>
+      <button id="startBtn">Start the day</button>
+    </div>
+  </div>
+
+  <div id="questionScreen" class="overlay hidden">
+    <div class="panel">
+      <h2 id="roomName"></h2>
+      <p id="questionText"></p>
+      <div class="options" id="options"></div>
+      <button id="skipBtn">Skip for now</button>
+    </div>
+  </div>
+
+  <div id="endScreen" class="overlay hidden">
+    <div class="panel">
+      <h2 id="endTitle"></h2>
+      <p id="endText"></p>
+      <p id="endBadges"></p>
+      <button id="againBtn">Play again</button>
+    </div>
+  </div>
+</div>
+
+<p id="hint"></p>
+
+<div id="controls">
+  <div class="pad">
+    <span></span><button data-dir="up" aria-label="Move up">&#8593;</button><span></span>
+    <button data-dir="left" aria-label="Move left">&#8592;</button>
+    <button data-dir="down" aria-label="Move down">&#8595;</button>
+    <button data-dir="right" aria-label="Move right">&#8594;</button>
+  </div>
+  <button id="enterBtn">Enter room (E)</button>
+  <span class="keys">Arrows / WASD to move. E to enter a room. Esc to skip a question.</span>
+</div>
+<p id="feedback"></p>
+
+<script type="module">
+import {
+  FLOOR_WIDTH,
+  FLOOR_HEIGHT,
+  PLAYER_RADIUS,
+  PLAYER_SPEED,
+  ROOMS,
+  createGame,
+  movePlayer,
+  roomAt,
+  hasBadge,
+  tryEnterRoom,
+  answerQuestion,
+  closeQuestion,
+  tick,
+  score,
+  formatTime,
+  roomById,
+} from '../src/game.js';
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const timeEl = document.getElementById('time');
+const badgesEl = document.getElementById('badges');
+const scoreEl = document.getElementById('score');
+const hintEl = document.getElementById('hint');
+const feedbackEl = document.getElementById('feedback');
+const startScreen = document.getElementById('startScreen');
+const questionScreen = document.getElementById('questionScreen');
+const endScreen = document.getElementById('endScreen');
+const roomNameEl = document.getElementById('roomName');
+const questionTextEl = document.getElementById('questionText');
+const optionsEl = document.getElementById('options');
+
+let game = createGame();
+let running = false;
+let lastFrame = 0;
+const keys = new Set();
+const touchDirs = new Set();
+
+function draw() {
+  ctx.clearRect(0, 0, FLOOR_WIDTH, FLOOR_HEIGHT);
+  ctx.fillStyle = '#f6f1e7';
+  ctx.fillRect(0, 0, FLOOR_WIDTH, FLOOR_HEIGHT);
+
+  for (const room of ROOMS) {
+    ctx.fillStyle = room.color;
+    ctx.fillRect(room.x, room.y, room.w, room.h);
+    ctx.strokeStyle = '#1c2333';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(room.x, room.y, room.w, room.h);
+    ctx.fillStyle = '#1c2333';
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(room.name, room.x + room.w / 2, room.y + 30);
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.fillText(
+      hasBadge(game, room.id) ? 'Badge collected' : 'Trivia: 1 question',
+      room.x + room.w / 2,
+      room.y + 54,
+    );
+  }
+
+  ctx.beginPath();
+  ctx.arc(game.player.x, game.player.y, PLAYER_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = '#2e7d5b';
+  ctx.fill();
+  ctx.strokeStyle = '#123524';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText('YOU', game.player.x, game.player.y + 4);
+
+  ctx.fillStyle = '#1c2333';
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.fillText('LOBBY', FLOOR_WIDTH / 2, FLOOR_HEIGHT / 2 - 40);
+}
+
+function updateHud() {
+  timeEl.textContent = formatTime(game.timeLeft);
+  badgesEl.textContent = game.badges.length + ' / ' + ROOMS.length;
+  scoreEl.textContent = score(game);
+}
+
+function updateHint() {
+  if (!running || game.status !== 'playing' || game.currentRoomId) {
+    hintEl.textContent = '';
+    return;
+  }
+  const room = roomAt(game);
+  if (!room) {
+    hintEl.textContent = 'Walk into a room to take its trivia question.';
+  } else if (hasBadge(game, room.id)) {
+    hintEl.textContent = room.name + ': badge already collected.';
+  } else {
+    hintEl.textContent = room.name + ': press E or tap Enter Room.';
+  }
+}
+
+function openQuestion(room) {
+  roomNameEl.textContent = room.name;
+  questionTextEl.textContent = room.question;
+  optionsEl.innerHTML = '';
+  room.options.forEach((option, index) => {
+    const button = document.createElement('button');
+    button.textContent = option;
+    button.addEventListener('click', () => {
+      const correct = answerQuestion(game, index);
+      feedbackEl.textContent = correct
+        ? 'Right. Badge earned for ' + room.name + '.'
+        : 'Not quite. You can try this room again.';
+      feedbackEl.style.color = correct ? '#7bd88f' : '#ff9d9d';
+      questionScreen.classList.add('hidden');
+      updateHud();
+      checkEnd();
+    });
+    optionsEl.appendChild(button);
+  });
+  questionScreen.classList.remove('hidden');
+  updateHint();
+}
+
+function enterRoom() {
+  if (!running || game.status !== 'playing') return;
+  const room = tryEnterRoom(game);
+  if (room) openQuestion(room);
+}
+
+function checkEnd() {
+  if (game.status === 'playing') return;
+  running = false;
+  const title = document.getElementById('endTitle');
+  const text = document.getElementById('endText');
+  const badges = document.getElementById('endBadges');
+  if (game.status === 'won') {
+    title.textContent = 'All six badges collected';
+    text.textContent = 'You finished the conference day with time to spare. Final score: ' + score(game) + '.';
+  } else {
+    title.textContent = 'The day is over';
+    text.textContent = 'The timer ran out. Final score: ' + score(game) + '.';
+  }
+  const names = game.badges.map((id) => roomById(id).name);
+  badges.textContent = 'Badges (' + game.badges.length + ' / 6): ' + (names.join(', ') || 'none yet');
+  endScreen.classList.remove('hidden');
+  updateHint();
+}
+
+function frame(now) {
+  if (!running) return;
+  const dt = Math.min((now - lastFrame) / 1000, 0.1);
+  lastFrame = now;
+
+  let dx = 0;
+  let dy = 0;
+  const left = keys.has('arrowleft') || keys.has('a') || touchDirs.has('left');
+  const right = keys.has('arrowright') || keys.has('d') || touchDirs.has('right');
+  const up = keys.has('arrowup') || keys.has('w') || touchDirs.has('up');
+  const down = keys.has('arrowdown') || keys.has('s') || touchDirs.has('down');
+  if (left) dx -= 1;
+  if (right) dx += 1;
+  if (up) dy -= 1;
+  if (down) dy += 1;
+  if (dx !== 0 || dy !== 0) {
+    const len = Math.hypot(dx, dy);
+    movePlayer(game, (dx / len) * PLAYER_SPEED * dt, (dy / len) * PLAYER_SPEED * dt);
+  }
+
+  if (!game.currentRoomId) {
+    tick(game, dt);
+    updateHud();
+    if (game.status !== 'playing') {
+      draw();
+      checkEnd();
+      return;
+    }
+  }
+  draw();
+  updateHint();
+  requestAnimationFrame(frame);
+}
+
+function startGame() {
+  game = createGame();
+  feedbackEl.textContent = '';
+  endScreen.classList.add('hidden');
+  startScreen.classList.add('hidden');
+  running = true;
+  updateHud();
+  draw();
+  lastFrame = performance.now();
+  requestAnimationFrame(frame);
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('againBtn').addEventListener('click', startGame);
+document.getElementById('enterBtn').addEventListener('click', enterRoom);
+document.getElementById('skipBtn').addEventListener('click', () => {
+  closeQuestion(game);
+  questionScreen.classList.add('hidden');
+  updateHint();
+});
+
+document.addEventListener('keydown', (event) => {
+  const key = event.key.toLowerCase();
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
+    event.preventDefault();
+  }
+  if (key === 'e') {
+    enterRoom();
+    return;
+  }
+  if (key === 'escape' && game.currentRoomId) {
+    closeQuestion(game);
+    questionScreen.classList.add('hidden');
+    updateHint();
+    return;
+  }
+  keys.add(key);
+});
+document.addEventListener('keyup', (event) => {
+  keys.delete(event.key.toLowerCase());
+});
+
+for (const button of document.querySelectorAll('.pad button')) {
+  const dir = button.dataset.dir;
+  button.addEventListener('pointerdown', () => touchDirs.add(dir));
+  button.addEventListener('pointerup', () => touchDirs.delete(dir));
+  button.addEventListener('pointerleave', () => touchDirs.delete(dir));
+}
+
+updateHud();
+draw();
+updateHint();
+</script>
+</body>
+</html>

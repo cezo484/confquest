@@ -1,0 +1,1 @@
+{"description":"ConfQuest: a conference floor mini-game. Collect talk badges before the day ends.","license":"MIT","name":"confquest","scripts":{"start":"node serve.js","test":"node --test test/*.test.js","web":"node serve.js"},"type":"module","version":"1.0.0"}
